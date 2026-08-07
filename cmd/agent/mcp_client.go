@@ -11,6 +11,7 @@ import (
 	"log"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,11 +24,15 @@ type jsonrpcMessage struct {
 	ID json.RawMessage `json:"id,omitempty"`
 }
 
-// mcpClient serializes writes to Codex MCP and dispatches responses by JSON-RPC ID.
+// mcpClient serializes writes to Codex MCP and dispatches responses by an
+// internal per-call JSON-RPC ID. Public callers are allowed to reuse the same
+// JSON-RPC IDs, so forwarding their IDs directly would let concurrent calls
+// overwrite each other in pending.
 type mcpClient struct {
 	stdin io.WriteCloser
 	mu    sync.Mutex
 
+	nextID    atomic.Uint64
 	pendingMu sync.Mutex
 	pending   map[string]chan json.RawMessage
 }
@@ -97,27 +102,60 @@ func (c *mcpClient) call(ctx context.Context, request json.RawMessage) (json.Raw
 		return nil, fmt.Errorf("parse jsonrpc request: %w", err)
 	}
 
-	key := string(msg.ID)
-	if key == "" {
+	if len(msg.ID) == 0 {
 		return nil, c.write(request)
+	}
+
+	internalID := fmt.Sprintf("webcodex-call-%d", c.nextID.Add(1))
+	forwarded, err := replaceJSONRPCID(request, internalID)
+	if err != nil {
+		return nil, fmt.Errorf("rewrite jsonrpc request id: %w", err)
 	}
 
 	respCh := make(chan json.RawMessage, 1)
 	c.pendingMu.Lock()
-	c.pending[key] = respCh
+	c.pending[internalID] = respCh
 	c.pendingMu.Unlock()
-	defer c.forget(key)
+	defer c.forget(internalID)
 
-	if err := c.write(request); err != nil {
+	if err := c.write(forwarded); err != nil {
 		return nil, err
 	}
 
 	select {
 	case response := <-respCh:
-		return response, nil
+		restored, err := replaceJSONRPCIDRaw(response, msg.ID)
+		if err != nil {
+			return nil, fmt.Errorf("restore jsonrpc response id: %w", err)
+		}
+		return restored, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func replaceJSONRPCID(message json.RawMessage, id string) (json.RawMessage, error) {
+	encodedID, err := json.Marshal(id)
+	if err != nil {
+		return nil, err
+	}
+	return replaceJSONRPCIDRaw(message, encodedID)
+}
+
+func replaceJSONRPCIDRaw(message json.RawMessage, id json.RawMessage) (json.RawMessage, error) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(message, &object); err != nil {
+		return nil, err
+	}
+	if object == nil {
+		return nil, errors.New("jsonrpc message must be an object")
+	}
+	object["id"] = append(json.RawMessage(nil), id...)
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
 }
 
 func (c *mcpClient) write(request json.RawMessage) error {
@@ -133,7 +171,7 @@ func (c *mcpClient) write(request json.RawMessage) error {
 	return nil
 }
 
-// readLoop dispatches each Codex MCP response to the call waiting on its JSON-RPC ID.
+// readLoop dispatches each Codex MCP response to the call waiting on its internal JSON-RPC ID.
 func (c *mcpClient) readLoop(stdout io.Reader) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
@@ -148,16 +186,21 @@ func (c *mcpClient) readLoop(stdout io.Reader) {
 			log.Printf("codex mcp bad json: %v", err)
 			continue
 		}
-		key := string(msg.ID)
-		if key == "" {
+		if len(msg.ID) == 0 {
+			continue
+		}
+
+		var internalID string
+		if err := json.Unmarshal(msg.ID, &internalID); err != nil || internalID == "" {
+			log.Printf("codex mcp response has invalid internal id %s", string(msg.ID))
 			continue
 		}
 
 		c.pendingMu.Lock()
-		respCh := c.pending[key]
+		respCh := c.pending[internalID]
 		c.pendingMu.Unlock()
 		if respCh == nil {
-			log.Printf("codex mcp response for unknown id %s", key)
+			log.Printf("codex mcp response for unknown id %q", internalID)
 			continue
 		}
 
