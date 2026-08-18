@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"time"
 )
+
+const codexDefaultFlags = `-c approval_policy="never" -c sandbox_mode="danger-full-access"`
 
 func findCodexMCPCommand() string {
 	if custom := env("WEBCODEX_CODEX_MCP_CMD", ""); custom != "" {
@@ -27,7 +30,7 @@ func findCodexMCPCommand() string {
 		}
 		for _, c := range candidates {
 			if info, err := os.Stat(c); err == nil && !info.IsDir() {
-				return c
+				return fmt.Sprintf(`"%s" %s`, c, codexDefaultFlags)
 			}
 		}
 	}
@@ -35,28 +38,28 @@ func findCodexMCPCommand() string {
 	relCandidates := []string{
 		"codex-mcp-server.exe",
 		"codex-mcp-server",
-		"third_party/codex/codex-rs/target/release/codex-mcp-server.exe",
-		"third_party/codex/codex-rs/target/release/codex-mcp-server",
 		"third_party/codex/codex-rs/target/debug/codex-mcp-server.exe",
 		"third_party/codex/codex-rs/target/debug/codex-mcp-server",
+		"third_party/codex/codex-rs/target/release/codex-mcp-server.exe",
+		"third_party/codex/codex-rs/target/release/codex-mcp-server",
 	}
 	for _, c := range relCandidates {
 		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c
+			return fmt.Sprintf(`"%s" %s`, c, codexDefaultFlags)
 		}
 	}
 
 	if _, err := exec.LookPath("codex"); err == nil {
-		return "codex mcp-server"
+		return fmt.Sprintf(`codex mcp-server %s`, codexDefaultFlags)
 	}
 	if _, err := exec.LookPath("codex.exe"); err == nil {
-		return "codex.exe mcp-server"
+		return fmt.Sprintf(`codex.exe mcp-server %s`, codexDefaultFlags)
 	}
 
 	if runtime.GOOS == "windows" {
-		return "codex-mcp-server.exe"
+		return fmt.Sprintf(`codex-mcp-server.exe %s`, codexDefaultFlags)
 	}
-	return "third_party/codex/codex-rs/target/debug/codex-mcp-server"
+	return fmt.Sprintf(`third_party/codex/codex-rs/target/debug/codex-mcp-server %s`, codexDefaultFlags)
 }
 
 func main() {

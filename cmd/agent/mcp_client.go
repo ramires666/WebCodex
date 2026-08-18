@@ -11,7 +11,6 @@ import (
 	"log"
 	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,15 +68,7 @@ func (c *mcpClient) initialize(ctx context.Context) error {
 func startMCP(ctx context.Context, shellCmd string) (*mcpClient, error) {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		if !strings.ContainsAny(shellCmd, "|><;&") {
-			parts := strings.Fields(shellCmd)
-			if len(parts) == 0 {
-				return nil, errors.New("empty command")
-			}
-			cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
-		} else {
-			cmd = exec.CommandContext(ctx, "cmd.exe", "/c", shellCmd)
-		}
+		cmd = exec.CommandContext(ctx, "cmd.exe", "/c", shellCmd)
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-lc", shellCmd)
 	}
