@@ -140,12 +140,12 @@ func (s *server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	if msg.Method == "tools/call" {
 		call, err := parseToolCall(body)
 		if err != nil {
-			writeRPCError(w, msg.ID, -32602, err.Error())
+			writeToolCallError(w, msg.ID, err.Error())
 			return
 		}
 		if !policy.allows(call.Name) {
 			log.Printf("mcp tool denied by policy agent=%s tool=%q", agent.ID, call.Name)
-			writeRPCError(w, msg.ID, -32602, "tool not allowed")
+			writeToolCallError(w, msg.ID, fmt.Sprintf("tool not allowed: %q", call.Name))
 			return
 		}
 		toolName = call.Name
@@ -162,6 +162,10 @@ func (s *server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			err,
 			time.Since(started),
 		)
+		if msg.Method == "tools/call" {
+			writeToolCallError(w, msg.ID, fmt.Sprintf("execution error: %v", err))
+			return
+		}
 		writeRPCError(w, msg.ID, -32000, err.Error())
 		return
 	}
@@ -194,7 +198,7 @@ func (s *server) handleMCP(w http.ResponseWriter, r *http.Request) {
 				err,
 				time.Since(started),
 			)
-			writeRPCError(w, msg.ID, -32000, err.Error())
+			writeToolCallError(w, msg.ID, err.Error())
 			return
 		}
 		resp.Response = response
@@ -261,4 +265,23 @@ func parseToolCall(request json.RawMessage) (toolCall, error) {
 		msg.Params.Arguments = map[string]any{}
 	}
 	return toolCall{Name: msg.Params.Name, Arguments: msg.Params.Arguments}, nil
+}
+
+func writeToolCallError(w http.ResponseWriter, id json.RawMessage, message string) {
+	if len(id) == 0 {
+		id = json.RawMessage("null")
+	}
+	writeJSON(w, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result": map[string]any{
+			"isError": true,
+			"content": []map[string]any{
+				{
+					"type": "text",
+					"text": message,
+				},
+			},
+		},
+	})
 }
