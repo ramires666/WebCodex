@@ -1,20 +1,49 @@
-// Command gate exposes a public MCP endpoint and relays calls to a local WebCodex agent.
+// Command gate exposes a public multi-agent MCP endpoint and relays calls to connected WebCodex agents.
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
 	srv, err := newServer()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("initialize server: %v", err)
 	}
+	defer srv.store.Close()
 
 	addr := env("WEBCODEX_ADDR", ":8080")
-	log.Printf("gate listening on %s", addr)
-	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
-		log.Fatalf("listen: %v", err)
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           srv.routes(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("webcodex-gate listening on %s (public URL: %s)", addr, srv.publicURL)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Printf("shutting down webcodex-gate gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("http shutdown error: %v", err)
+	}
+	log.Printf("webcodex-gate stopped")
 }

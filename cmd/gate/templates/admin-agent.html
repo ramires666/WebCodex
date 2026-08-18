@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Агент {{.Agent.Name}} — WebCodex Gate</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --card-border: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-color: #38bdf8;
+            --accent-hover: #0284c7;
+            --online-color: #22c55e;
+            --offline-color: #64748b;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --warning-color: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 2rem 1rem;
+            line-height: 1.5;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .back-link { display: inline-block; color: var(--accent-color); text-decoration: none; margin-bottom: 1rem; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 1rem;
+        }
+        h1 { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        h2 { font-size: 1.15rem; margin-bottom: 1rem; font-weight: 600; color: var(--accent-color); }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge.online { background-color: rgba(34, 197, 94, 0.15); color: var(--online-color); border: 1px solid var(--online-color); }
+        .badge.offline { background-color: rgba(100, 116, 139, 0.15); color: var(--offline-color); border: 1px solid var(--offline-color); }
+        .badge.disabled { background-color: rgba(239, 68, 68, 0.15); color: var(--danger-color); border: 1px solid var(--danger-color); }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .badge.online .badge-dot { background-color: var(--online-color); }
+        .badge.offline .badge-dot { background-color: var(--offline-color); }
+        .badge.disabled .badge-dot { background-color: var(--danger-color); }
+        .btn {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 0.875rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        .btn:hover { background-color: var(--accent-hover); }
+        .btn-danger { background-color: var(--danger-color); color: #fff; }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        .btn-secondary { background-color: #334155; color: var(--text-primary); }
+        .btn-secondary:hover { background-color: #475569; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        @media (max-width: 600px) { .meta-grid { grid-template-columns: 1fr; } }
+        .meta-item { background: #0f172a; padding: 0.75rem; border-radius: 0.375rem; border: 1px solid var(--card-border); }
+        .meta-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.25rem; }
+        .meta-value { font-family: monospace; font-size: 0.9rem; word-break: break-all; }
+        .actions-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.375rem; color: var(--text-secondary); }
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 0.625rem;
+            background-color: #0f172a;
+            border: 1px solid var(--card-border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        textarea:focus, input[type="text"]:focus { outline: 2px solid var(--accent-color); border-color: transparent; }
+        pre {
+            background-color: #0f172a;
+            border: 1px solid var(--card-border);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            font-family: Consolas, Monaco, "Courier New", monospace;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .notice { background: rgba(56, 189, 248, 0.1); border-left: 3px solid var(--accent-color); padding: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/admin" class="back-link">&larr; Вернуться к списку агентов</a>
+        
+        <header>
+            <div>
+                <h1>{{.Agent.Name}} <span style="font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">({{.Agent.ID}})</span></h1>
+            </div>
+            <div>
+                {{if not .Agent.Enabled}}
+                    <span class="badge disabled"><span class="badge-dot"></span>Отключен</span>
+                {{else if .Online}}
+                    <span class="badge online"><span class="badge-dot"></span>Online</span>
+                {{else}}
+                    <span class="badge offline"><span class="badge-dot"></span>Offline</span>
+                {{end}}
+            </div>
+        </header>
+
+        <section class="card">
+            <h2>Информация об агенте</h2>
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <div class="meta-label">ID агента</div>
+                    <div class="meta-value">{{.Agent.ID}}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">OAuth Client ID</div>
+                    <div class="meta-value">{{.Agent.OAuthClientID}}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Создан</div>
+                    <div class="meta-value">{{.CreatedAtFormatted}}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Последняя активность</div>
+                    <div class="meta-value">{{if .Agent.LastSeenAt}}{{.LastSeenFormatted}}{{else}}Никогда{{end}}</div>
+                </div>
+            </div>
+
+            <h2>Управление состоянием и токенами</h2>
+            <div class="actions-grid">
+                <form action="/admin/agents/{{.Agent.ID}}/toggle" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    {{if .Agent.Enabled}}
+                        <button type="submit" class="btn btn-secondary">Отключить агента</button>
+                    {{else}}
+                        <button type="submit" class="btn">Включить агента</button>
+                    {{end}}
+                </form>
+
+                <form action="/admin/agents/{{.Agent.ID}}/rotate-agent-token" method="POST" style="display:inline;" onsubmit="return confirm('Вы уверены? Текущий stream агента будет немедленно разорван, и потребуется обновить токен в агенте.');">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    <button type="submit" class="btn btn-secondary">Ротировать Agent Token</button>
+                </form>
+
+                <form action="/admin/agents/{{.Agent.ID}}/rotate-oauth-secret" method="POST" style="display:inline;" onsubmit="return confirm('Вы уверены? Все выданные MCP токены доступа для ChatGPT будут отозваны.');">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    <button type="submit" class="btn btn-secondary">Ротировать OAuth Secret</button>
+                </form>
+
+                <form action="/admin/agents/{{.Agent.ID}}/revoke-access" method="POST" style="display:inline;" onsubmit="return confirm('Отозвать все активные сессии ChatGPT для этого агента?');">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    <button type="submit" class="btn btn-secondary">Отозвать MCP сессии</button>
+                </form>
+
+                <form action="/admin/agents/{{.Agent.ID}}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Удалить агента полностью? Это действие необратимо.');">
+                    <input type="hidden" name="csrf" value="{{.CSRF}}">
+                    <button type="submit" class="btn btn-danger">Удалить агента</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Политика инструментов (Tool Policy)</h2>
+            <form action="/admin/agents/{{.Agent.ID}}/policy" method="POST">
+                <input type="hidden" name="csrf" value="{{.CSRF}}">
+                <div class="form-group">
+                    <label for="allowed_tools">Разрешенные инструменты (Allowed Tools)</label>
+                    <textarea id="allowed_tools" name="allowed_tools" rows="2" placeholder="exec_command,read_file,write_file (оставьте пустым для разрешения всех)">{{.Agent.AllowedTools}}</textarea>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem;">Через запятую. Если список пуст — разрешены все инструменты (кроме запрещенных).</div>
+                </div>
+                <div class="form-group">
+                    <label for="denied_tools">Запрещенные инструменты (Denied Tools)</label>
+                    <textarea id="denied_tools" name="denied_tools" rows="2" placeholder="apply_patch (имеет наивысший приоритет)">{{.Agent.DeniedTools}}</textarea>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem;">Через запятую. Запрещенные инструменты фильтруются в первую очередь.</div>
+                </div>
+                <button type="submit" class="btn">Сохранить политику инструментов</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Подключение агента (Windows PowerShell)</h2>
+            <div class="notice">Запустите эти команды на рабочем компьютере, где установлен webcodex-agent.exe:</div>
+            <pre>$env:WEBCODEX_GATE_URL = "{{.PublicURL}}"
+$env:WEBCODEX_AGENT_TOKEN = "&lt;ВАШ_AGENT_TOKEN&gt;"
+.\webcodex-agent.exe</pre>
+        </section>
+
+        <section class="card">
+            <h2>Настройка ChatGPT MCP Connector</h2>
+            <div class="notice">Используйте эти параметры при добавлении Custom MCP / Action в ChatGPT:</div>
+            <pre>Server URL:        {{.PublicURL}}/mcp
+Authorization URL: {{.PublicURL}}/oauth/authorize
+Token URL:         {{.PublicURL}}/oauth/token
+Client ID:         {{.Agent.OAuthClientID}}
+Client Secret:     [Получен при создании или ротации]</pre>
+        </section>
+    </div>
+</body>
+</html>
