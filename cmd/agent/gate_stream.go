@@ -62,19 +62,15 @@ func handleRequest(
 	request protocol.AgentRequest,
 ) {
 	started := time.Now()
-	log.Printf("agent request started id=%s bytes=%d", request.ID, len(request.Request))
+	actionDesc := formatActionRequest(request.Request)
+	log.Printf("▶ %s (id=%s, bytes=%d)", actionDesc, request.ID, len(request.Request))
 
 	callCtx, cancel := context.WithTimeout(ctx, durationEnv("WEBCODEX_MCP_CALL_TIMEOUT", 10*time.Minute))
 	defer cancel()
 
 	response, err := mcp.call(callCtx, request.Request)
-	log.Printf(
-		"agent request completed id=%s response_bytes=%d error=%v elapsed=%s",
-		request.ID,
-		len(response),
-		err,
-		time.Since(started),
-	)
+	actionResult := formatActionResponse(response, err, time.Since(started))
+	log.Printf("◀ %s (id=%s)", actionResult, request.ID)
 	result := protocol.AgentResponse{ID: request.ID, Response: response}
 	if err != nil {
 		result.Error = err.Error()
