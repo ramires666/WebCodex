@@ -204,6 +204,10 @@ func (s *server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		resp.Response = response
 	}
 
+	if msg.Method == "tools/call" {
+		resp.Response = ensureToolCallResult(resp.Response, msg.ID)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(resp.Response); err != nil {
 		log.Printf("write mcp response agent=%s error=%v", agent.ID, err)
@@ -265,6 +269,51 @@ func parseToolCall(request json.RawMessage) (toolCall, error) {
 		msg.Params.Arguments = map[string]any{}
 	}
 	return toolCall{Name: msg.Params.Name, Arguments: msg.Params.Arguments}, nil
+}
+
+func ensureToolCallResult(response json.RawMessage, id json.RawMessage) json.RawMessage {
+	if len(id) == 0 {
+		id = json.RawMessage("null")
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(response, &obj); err != nil {
+		out, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      id,
+			"result": map[string]any{
+				"isError": true,
+				"content": []map[string]any{
+					{"type": "text", "text": string(response)},
+				},
+			},
+		})
+		return out
+	}
+
+	// If the upstream codex response contains a JSON-RPC error, convert it to an MCP tool result with isError: true
+	if errObj, ok := obj["error"]; ok && errObj != nil {
+		errMsg := "unknown tool error"
+		if errMap, ok := errObj.(map[string]any); ok {
+			if msg, ok := errMap["message"].(string); ok && msg != "" {
+				errMsg = msg
+			}
+		} else if str, ok := errObj.(string); ok {
+			errMsg = str
+		}
+		out, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      id,
+			"result": map[string]any{
+				"isError": true,
+				"content": []map[string]any{
+					{"type": "text", "text": errMsg},
+				},
+			},
+		})
+		return out
+	}
+
+	return response
 }
 
 func writeToolCallError(w http.ResponseWriter, id json.RawMessage, message string) {

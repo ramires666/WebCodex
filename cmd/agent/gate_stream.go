@@ -64,7 +64,7 @@ func handleRequest(
 	started := time.Now()
 	log.Printf("agent request started id=%s bytes=%d", request.ID, len(request.Request))
 
-	callCtx, cancel := context.WithTimeout(ctx, durationEnv("WEBCODEX_MCP_CALL_TIMEOUT", 2*time.Minute))
+	callCtx, cancel := context.WithTimeout(ctx, durationEnv("WEBCODEX_MCP_CALL_TIMEOUT", 10*time.Minute))
 	defer cancel()
 
 	response, err := mcp.call(callCtx, request.Request)
