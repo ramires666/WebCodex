@@ -352,6 +352,59 @@ func TestToolPolicyEnforcementPerAgent(t *testing.T) {
 	}
 }
 
+func TestToolCallErrorsAreAlwaysEncapsulatedAsMCPResults(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	rawAgentToken := "wc_agent_test_encap"
+	_ = srv.store.CreateAgent(ctx, Agent{
+		ID:             "agent-encap",
+		Name:           "Agent Encap",
+		Enabled:        true,
+		AgentTokenHash: hashSecret(rawAgentToken),
+		OAuthClientID:  "client-encap",
+	})
+
+	rawToken, _ := generateSecret("wc_mcp_test_")
+	_ = srv.store.CreateAccessToken(ctx, AccessToken{
+		TokenHash: hashSecret(rawToken),
+		AgentID:   "agent-encap",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+
+	// When calling a tool with no agent connected (which causes an agent call error/timeout)
+	callBody := `{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"shell_command","arguments":{"command":"dir"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(callBody))
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+	rec := httptest.NewRecorder()
+
+	srv.timeout = 100 * time.Millisecond
+	srv.handleMCP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200 OK for MCP tool call with error result, got %d", rec.Code)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+
+	if _, hasError := parsed["error"]; hasError {
+		t.Fatalf("expected NO JSON-RPC error field in response, but got: %v", parsed["error"])
+	}
+
+	result, ok := parsed["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result object in JSON-RPC response, got: %v", parsed)
+	}
+
+	if result["isError"] != true {
+		t.Fatalf("expected isError: true in result, got: %v", result["isError"])
+	}
+}
+
 func TestRotateAgentTokenDisconnectsStream(t *testing.T) {
 	srv, cleanup := setupTestServer(t)
 	defer cleanup()
