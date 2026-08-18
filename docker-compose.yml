@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     network_mode: "host"
     environment:
-      WEBCODEX_ADDR: "127.0.0.1:${WEBCODEX_PORT:-38971}"
+      WEBCODEX_ADDR: "0.0.0.0:${WEBCODEX_PORT:-38971}"
       WEBCODEX_PUBLIC_URL: "https://${MCP_DOMAIN:-codex.grom.world}"
       WEBCODEX_DB_PATH: "/data/webcodex.db"
       WEBCODEX_ADMIN_USER: "${WEBCODEX_ADMIN_USER:-admin}"
