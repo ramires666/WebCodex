@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -14,11 +13,17 @@ import (
 	"time"
 )
 
-const codexDefaultFlags = `-c approval_policy="never" -c sandbox_mode="danger-full-access"`
+func findCodexMCP() (string, []string) {
+	defaultArgs := []string{
+		"-c", `approval_policy="never"`,
+		"-c", `sandbox_mode="danger-full-access"`,
+	}
 
-func findCodexMCPCommand() string {
 	if custom := env("WEBCODEX_CODEX_MCP_CMD", ""); custom != "" {
-		return custom
+		parts := strings.Fields(custom)
+		if len(parts) > 0 {
+			return parts[0], parts[1:]
+		}
 	}
 
 	exePath, err := os.Executable()
@@ -30,7 +35,7 @@ func findCodexMCPCommand() string {
 		}
 		for _, c := range candidates {
 			if info, err := os.Stat(c); err == nil && !info.IsDir() {
-				return fmt.Sprintf(`"%s" %s`, c, codexDefaultFlags)
+				return c, defaultArgs
 			}
 		}
 	}
@@ -45,36 +50,36 @@ func findCodexMCPCommand() string {
 	}
 	for _, c := range relCandidates {
 		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return fmt.Sprintf(`"%s" %s`, c, codexDefaultFlags)
+			return c, defaultArgs
 		}
 	}
 
-	if _, err := exec.LookPath("codex"); err == nil {
-		return fmt.Sprintf(`codex mcp-server %s`, codexDefaultFlags)
+	if p, err := exec.LookPath("codex"); err == nil {
+		return p, append([]string{"mcp-server"}, defaultArgs...)
 	}
-	if _, err := exec.LookPath("codex.exe"); err == nil {
-		return fmt.Sprintf(`codex.exe mcp-server %s`, codexDefaultFlags)
+	if p, err := exec.LookPath("codex.exe"); err == nil {
+		return p, append([]string{"mcp-server"}, defaultArgs...)
 	}
 
 	if runtime.GOOS == "windows" {
-		return fmt.Sprintf(`codex-mcp-server.exe %s`, codexDefaultFlags)
+		return "codex-mcp-server.exe", defaultArgs
 	}
-	return fmt.Sprintf(`third_party/codex/codex-rs/target/debug/codex-mcp-server %s`, codexDefaultFlags)
+	return "third_party/codex/codex-rs/target/debug/codex-mcp-server", defaultArgs
 }
 
 func main() {
 	gateURL := strings.TrimRight(env("WEBCODEX_GATE_URL", ""), "/")
 	token := env("WEBCODEX_AGENT_TOKEN", "")
-	codexCmd := findCodexMCPCommand()
+	binary, args := findCodexMCP()
 
 	if gateURL == "" || token == "" {
 		log.Fatal("WEBCODEX_GATE_URL and WEBCODEX_AGENT_TOKEN are required")
 	}
 
-	log.Printf("starting agent with codex command: %s", codexCmd)
-	mcp, err := startMCP(context.Background(), codexCmd)
+	log.Printf("starting agent with binary: %s, args: %v", binary, args)
+	mcp, err := startMCP(context.Background(), binary, args)
 	if err != nil {
-		log.Fatalf("start codex mcp (%s): %v", codexCmd, err)
+		log.Fatalf("start codex mcp (%s): %v", binary, err)
 	}
 	if err := mcp.initialize(context.Background()); err != nil {
 		log.Fatalf("initialize codex mcp: %v", err)
