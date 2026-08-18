@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 )
 
 func (s *server) handleProtectedResource(w http.ResponseWriter, r *http.Request) {
@@ -38,70 +40,167 @@ func (s *server) handleOAuthServer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAuthorize redirects the configured client with the fixed code expected by this single-client gate.
+// handleAuthorize validates the client ID, produces a single-use authorization code, and redirects.
 func (s *server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client_id")
+	redirectURI := r.URL.Query().Get("redirect_uri")
+
 	log.Printf(
 		"oauth authorize client_id=%q redirect_uri=%q ua=%q",
-		r.URL.Query().Get("client_id"),
-		r.URL.Query().Get("redirect_uri"),
+		clientID,
+		redirectURI,
 		r.UserAgent(),
 	)
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.oauthID != "" && r.URL.Query().Get("client_id") != s.oauthID {
-		http.Error(w, "unknown client", http.StatusUnauthorized)
+
+	if clientID == "" {
+		http.Error(w, "missing client_id", http.StatusBadRequest)
 		return
 	}
-	redirectURI := r.URL.Query().Get("redirect_uri")
+
+	agent, err := s.store.FindAgentByOAuthClientID(r.Context(), clientID)
+	if err != nil || !agent.Enabled {
+		http.Error(w, "unknown or disabled client", http.StatusUnauthorized)
+		return
+	}
+
 	if redirectURI == "" {
 		http.Error(w, "missing redirect_uri", http.StatusBadRequest)
 		return
 	}
-	target, err := http.NewRequest(http.MethodGet, redirectURI, nil)
+
+	target, err := url.Parse(redirectURI)
 	if err != nil {
-		http.Error(w, "bad redirect_uri", http.StatusBadRequest)
+		http.Error(w, "invalid redirect_uri", http.StatusBadRequest)
 		return
 	}
-	query := target.URL.Query()
-	query.Set("code", "webcodex")
+
+	code, err := generateSecret("wc_code_")
+	if err != nil {
+		http.Error(w, "generate code error", http.StatusInternalServerError)
+		return
+	}
+
+	entry := oauthCode{
+		AgentID:             agent.ID,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       r.URL.Query().Get("code_challenge"),
+		CodeChallengeMethod: r.URL.Query().Get("code_challenge_method"),
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+
+	s.oauthMu.Lock()
+	s.oauthCodes[code] = entry
+	s.oauthMu.Unlock()
+
+	query := target.Query()
+	query.Set("code", code)
 	if state := r.URL.Query().Get("state"); state != "" {
 		query.Set("state", state)
 	}
-	target.URL.RawQuery = query.Encode()
-	http.Redirect(w, r, target.URL.String(), http.StatusFound)
+	target.RawQuery = query.Encode()
+
+	http.Redirect(w, r, target.String(), http.StatusFound)
 }
 
+// handleToken exchanges an authorization code for a long-lived MCP Bearer token.
 func (s *server) handleToken(w http.ResponseWriter, r *http.Request) {
 	log.Printf("oauth token %s content_type=%q ua=%q", r.Method, r.Header.Get("Content-Type"), r.UserAgent())
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	params, err := tokenParams(r)
 	if err != nil {
 		http.Error(w, "bad token request", http.StatusBadRequest)
 		return
 	}
+
 	clientID, clientSecret := params["client_id"], params["client_secret"]
 	if authID, authSecret, ok := r.BasicAuth(); ok {
 		clientID, clientSecret = authID, authSecret
 	}
-	if s.oauthID != "" && clientID != s.oauthID {
-		http.Error(w, "unknown client", http.StatusUnauthorized)
+
+	if clientID == "" || clientSecret == "" {
+		http.Error(w, "missing client credentials", http.StatusUnauthorized)
 		return
 	}
-	if s.oauthSecret != "" && clientSecret != s.oauthSecret {
+
+	agent, err := s.store.FindAgentByOAuthClientID(r.Context(), clientID)
+	if err != nil || !agent.Enabled {
+		http.Error(w, "unknown or disabled client", http.StatusUnauthorized)
+		return
+	}
+
+	secretHash := hashSecret(clientSecret)
+	if !secureCompare(secretHash, agent.OAuthClientSecretHash) {
 		http.Error(w, "bad client secret", http.StatusUnauthorized)
 		return
 	}
+
 	if params["grant_type"] != "authorization_code" {
 		http.Error(w, "unsupported grant_type", http.StatusBadRequest)
 		return
 	}
+
+	codeVal := params["code"]
+	if codeVal == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+
+	s.oauthMu.Lock()
+	entry, exists := s.oauthCodes[codeVal]
+	delete(s.oauthCodes, codeVal)
+	s.oauthMu.Unlock()
+
+	if !exists || time.Now().After(entry.ExpiresAt) || entry.ClientID != clientID || entry.AgentID != agent.ID {
+		http.Error(w, "invalid or expired authorization code", http.StatusBadRequest)
+		return
+	}
+
+	if entry.RedirectURI != "" {
+		reqRedirectURI := params["redirect_uri"]
+		if reqRedirectURI != "" && reqRedirectURI != entry.RedirectURI {
+			http.Error(w, "redirect_uri mismatch", http.StatusBadRequest)
+			return
+		}
+	}
+
+	verifier := params["code_verifier"]
+	if !verifyPKCE(verifier, entry.CodeChallenge, entry.CodeChallengeMethod) {
+		http.Error(w, "invalid code_verifier", http.StatusBadRequest)
+		return
+	}
+
+	rawToken, err := generateSecret("wc_mcp_")
+	if err != nil {
+		http.Error(w, "generate access token error", http.StatusInternalServerError)
+		return
+	}
+
+	tokenHash := hashSecret(rawToken)
+	expiresAt := time.Now().Add(365 * 24 * time.Hour)
+
+	if err := s.store.CreateAccessToken(r.Context(), AccessToken{
+		TokenHash: tokenHash,
+		AgentID:   agent.ID,
+		ExpiresAt: expiresAt,
+	}); err != nil {
+		log.Printf("create access token in store error: %v", err)
+		http.Error(w, "failed to persist access token", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("oauth token issued agent=%s client_id=%s", agent.ID, clientID)
 	writeJSON(w, map[string]any{
-		"access_token": s.publicToken,
+		"access_token": rawToken,
 		"token_type":   "Bearer",
 		"expires_in":   31536000,
 		"scope":        "mcp",

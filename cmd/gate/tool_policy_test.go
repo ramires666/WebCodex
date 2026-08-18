@@ -6,9 +6,7 @@ import (
 )
 
 func TestToolPolicyFiltersToolsList(t *testing.T) {
-	srv := &server{
-		toolPolicy: newToolPolicy("exec_command,apply_patch", "apply_patch"),
-	}
+	policy := newToolPolicy("exec_command,apply_patch", "apply_patch")
 	response := json.RawMessage(`{
 		"jsonrpc":"2.0",
 		"id":1,
@@ -21,7 +19,7 @@ func TestToolPolicyFiltersToolsList(t *testing.T) {
 		}
 	}`)
 
-	filtered, err := srv.filterToolsList(response)
+	filtered, err := filterToolsList(response, policy, false)
 	if err != nil {
 		t.Fatalf("filter tools list: %v", err)
 	}

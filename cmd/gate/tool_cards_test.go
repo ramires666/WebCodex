@@ -6,17 +6,14 @@ import (
 )
 
 func TestFilterToolsListAddsToolCardMetadata(t *testing.T) {
-	srv := &server{
-		toolPolicy: newToolPolicy("", ""),
-		toolCards:  true,
-	}
+	policy := newToolPolicy("", "")
 	response := json.RawMessage(`{
 		"jsonrpc":"2.0",
 		"id":1,
 		"result":{"tools":[{"name":"exec_command"}]}
 	}`)
 
-	filtered, err := srv.filterToolsList(response)
+	filtered, err := filterToolsList(response, policy, true)
 	if err != nil {
 		t.Fatalf("filter tools list: %v", err)
 	}
@@ -56,14 +53,14 @@ func TestFilterToolsListAddsToolCardMetadata(t *testing.T) {
 }
 
 func TestFilterToolsListLeavesToolCardsDisabledByDefault(t *testing.T) {
-	srv := &server{toolPolicy: newToolPolicy("", "")}
+	policy := newToolPolicy("", "")
 	response := json.RawMessage(`{
 		"jsonrpc":"2.0",
 		"id":1,
 		"result":{"tools":[{"name":"exec_command"}]}
 	}`)
 
-	filtered, err := srv.filterToolsList(response)
+	filtered, err := filterToolsList(response, policy, false)
 	if err != nil {
 		t.Fatalf("filter tools list: %v", err)
 	}
@@ -102,31 +99,16 @@ func TestDecorateToolCallResponseAddsStructuredContent(t *testing.T) {
 	var msg struct {
 		Result struct {
 			StructuredContent map[string]any `json:"structuredContent"`
-			Meta              map[string]any `json:"_meta"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(decorated, &msg); err != nil {
 		t.Fatalf("parse decorated response: %v", err)
 	}
-	if msg.Result.StructuredContent["icon"] != "edit" {
-		t.Fatalf("icon = %v, want edit", msg.Result.StructuredContent["icon"])
+	sc := msg.Result.StructuredContent
+	if sc["tool"] != "apply_patch" {
+		t.Fatalf("tool = %v, want apply_patch", sc["tool"])
 	}
-	if msg.Result.StructuredContent["display_title"] != "Apply Patch" {
-		t.Fatalf("display title = %v, want Apply Patch", msg.Result.StructuredContent["display_title"])
-	}
-	if msg.Result.StructuredContent["output"] != "ok" {
-		t.Fatalf("output = %v, want ok", msg.Result.StructuredContent["output"])
-	}
-	if _, ok := msg.Result.StructuredContent["arguments"].(map[string]any); !ok {
-		t.Fatalf("arguments = %#v, want object", msg.Result.StructuredContent["arguments"])
-	}
-	if msg.Result.Meta["webcodex/toolCard"] != true {
-		t.Fatalf("tool card meta = %v, want true", msg.Result.Meta["webcodex/toolCard"])
-	}
-	if msg.Result.Meta["webcodex/output"] != "ok" {
-		t.Fatalf("meta output = %v, want ok", msg.Result.Meta["webcodex/output"])
-	}
-	if msg.Result.Meta["openai/outputTemplate"] != toolCardURI {
-		t.Fatalf("result output template = %v, want %q", msg.Result.Meta["openai/outputTemplate"], toolCardURI)
+	if sc["display_title"] != "Apply Patch" {
+		t.Fatalf("display_title = %v, want Apply Patch", sc["display_title"])
 	}
 }

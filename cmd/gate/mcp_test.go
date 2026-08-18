@@ -1,15 +1,33 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestHandleMCPStream(t *testing.T) {
-	srv := &server{publicToken: "secret"}
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	rawToken := "wc_mcp_test_stream"
+	_ = srv.store.CreateAgent(context.Background(), Agent{
+		ID:             "stream-agent",
+		Name:           "Stream Agent",
+		Enabled:        true,
+		AgentTokenHash: hashSecret("agent_tok"),
+		OAuthClientID:  "client_tok",
+	})
+	_ = srv.store.CreateAccessToken(context.Background(), AccessToken{
+		TokenHash: hashSecret(rawToken),
+		AgentID:   "stream-agent",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	req.Header.Set("Accept", "text/event-stream")
 	rec := httptest.NewRecorder()
 
