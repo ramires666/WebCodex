@@ -1,0 +1,7 @@
+{$MCP_DOMAIN:codex.grom.world} {
+    encode zstd gzip
+
+    reverse_proxy gate:8080 {
+        flush_interval -1
+    }
+}

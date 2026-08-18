@@ -1,0 +1,14 @@
+.git
+.gitignore
+bin
+dev-data
+data
+third_party
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+README*
+cmd/agent

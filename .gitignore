@@ -6,3 +6,9 @@ third_party/codex/**/node_modules/
 *.log
 .env
 .env.*
+!.env.example
+data/
+dev-data/
+*.db
+*.sqlite
+*.sqlite3

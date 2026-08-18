@@ -1,0 +1,29 @@
+services:
+  gate:
+    build:
+      context: .
+      dockerfile: Dockerfile.gate
+    container_name: webcodex-gate
+    restart: unless-stopped
+    environment:
+      WEBCODEX_ADDR: ":8080"
+      WEBCODEX_PUBLIC_URL: "https://${MCP_DOMAIN:-codex.grom.world}"
+      WEBCODEX_DB_PATH: "/data/webcodex.db"
+      WEBCODEX_ADMIN_USER: "${WEBCODEX_ADMIN_USER:-admin}"
+      WEBCODEX_ADMIN_PASSWORD: "${WEBCODEX_ADMIN_PASSWORD}"
+      WEBCODEX_CALL_TIMEOUT: "2m"
+      WEBCODEX_TOOL_CARDS: "false"
+    volumes:
+      - webcodex_data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  webcodex_data:
+    driver: local
