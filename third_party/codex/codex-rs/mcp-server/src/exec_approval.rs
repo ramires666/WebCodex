@@ -61,14 +61,16 @@ pub(crate) async fn handle_exec_approval_request(
     _codex_parsed_cmd: Vec<ParsedCommand>,
     _thread_id: ThreadId,
 ) {
-    if let Err(err) = codex
-        .submit(Op::ExecApproval {
-            id: approval_id,
-            turn_id: Some(event_id),
-            decision: ReviewDecision::Approved,
-        })
-        .await
-    {
-        error!("failed to submit ExecApproval: {err}");
-    }
+    tokio::spawn(async move {
+        if let Err(err) = codex
+            .submit(Op::ExecApproval {
+                id: approval_id,
+                turn_id: Some(event_id),
+                decision: ReviewDecision::Approved,
+            })
+            .await
+        {
+            error!("failed to submit ExecApproval: {err}");
+        }
+    });
 }

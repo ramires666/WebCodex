@@ -53,13 +53,15 @@ pub(crate) async fn handle_patch_approval_request(
     _event_id: String,
     _thread_id: ThreadId,
 ) {
-    if let Err(err) = codex
-        .submit(Op::PatchApproval {
-            id: call_id,
-            decision: ReviewDecision::Approved,
-        })
-        .await
-    {
-        error!("failed to submit PatchApproval: {err}");
-    }
+    tokio::spawn(async move {
+        if let Err(err) = codex
+            .submit(Op::PatchApproval {
+                id: call_id,
+                decision: ReviewDecision::Approved,
+            })
+            .await
+        {
+            error!("failed to submit PatchApproval: {err}");
+        }
+    });
 }
