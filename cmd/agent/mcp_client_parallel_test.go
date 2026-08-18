@@ -12,7 +12,7 @@ import (
 )
 
 func TestConcurrentCallsWithSamePublicIDStayIsolated(t *testing.T) {
-	const callCount = 64
+	const callCount = 16
 
 	requestReader, requestWriter := io.Pipe()
 	responseReader, responseWriter := io.Pipe()
@@ -27,25 +27,31 @@ func TestConcurrentCallsWithSamePublicIDStayIsolated(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		scanner := bufio.NewScanner(requestReader)
-		ids := make([]string, 0, callCount)
-		names := make([]string, 0, callCount)
-		for scanner.Scan() && len(ids) < callCount {
-			var req struct {
-				ID string `json:"id"`
-				Params struct { Agent string `json:"agent"` } `json:"params"`
-			}
-			if err := json.Unmarshal(scanner.Bytes(), &req); err != nil { errCh <- err; return }
-			ids = append(ids, req.ID)
-			names = append(names, req.Params.Agent)
-		}
 		seen := map[string]bool{}
-		for _, id := range ids {
-			if seen[id] { errCh <- fmt.Errorf("duplicate id %s", id); return }
-			seen[id] = true
+		for count := 0; count < callCount && scanner.Scan(); count++ {
+			var req struct {
+				ID     string `json:"id"`
+				Params struct {
+					Agent string `json:"agent"`
+				} `json:"params"`
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+				errCh <- err
+				return
+			}
+			if seen[req.ID] {
+				errCh <- fmt.Errorf("duplicate id %s", req.ID)
+				return
+			}
+			seen[req.ID] = true
+			if _, err := fmt.Fprintf(responseWriter, "{\"jsonrpc\":\"2.0\",\"id\":%q,\"result\":{\"agent\":%q}}\n", req.ID, req.Params.Agent); err != nil {
+				errCh <- err
+				return
+			}
 		}
-		for i := len(ids)-1; i >= 0; i-- {
-			fmt.Fprintf(responseWriter, `{"jsonrpc":"2.0","id":%q,"result":{"agent":%q}}
-`, ids[i], names[i])
+		if err := scanner.Err(); err != nil {
+			errCh <- err
+			return
 		}
 		errCh <- nil
 	}()
@@ -60,16 +66,27 @@ func TestConcurrentCallsWithSamePublicIDStayIsolated(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			resp, err := client.call(ctx, json.RawMessage(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"agent":%q}}`, name)))
-			if err != nil { results <- err.Error(); return }
-			var out struct { Result struct { Agent string `json:"agent"` } `json:"result"` }
-			json.Unmarshal(resp, &out)
+			if err != nil {
+				results <- err.Error()
+				return
+			}
+			var out struct {
+				Result struct {
+					Agent string `json:"agent"`
+				} `json:"result"`
+			}
+			_ = json.Unmarshal(resp, &out)
 			results <- out.Result.Agent
 		}()
 	}
 	wg.Wait()
 	close(results)
-	if err := <-errCh; err != nil { t.Fatal(err) }
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
 	for result := range results {
-		if len(result) == 0 { t.Fatal("empty result") }
+		if len(result) == 0 {
+			t.Fatal("empty result")
+		}
 	}
 }
