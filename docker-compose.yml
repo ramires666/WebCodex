@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     network_mode: "host"
     environment:
-      WEBCODEX_ADDR: "127.0.0.1:8080"
+      WEBCODEX_ADDR: "127.0.0.1:${WEBCODEX_PORT:-8088}"
       WEBCODEX_PUBLIC_URL: "https://${MCP_DOMAIN:-codex.grom.world}"
       WEBCODEX_DB_PATH: "/data/webcodex.db"
       WEBCODEX_ADMIN_USER: "${WEBCODEX_ADMIN_USER:-admin}"
@@ -17,7 +17,7 @@ services:
     volumes:
       - webcodex_data:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:${WEBCODEX_PORT:-8088}/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
