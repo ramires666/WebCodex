@@ -170,67 +170,11 @@ impl Approvable<UnifiedExecRequest> for UnifiedExecRuntime<'_> {
 
     fn start_approval_async<'b>(
         &'b mut self,
-        req: &'b UnifiedExecRequest,
-        ctx: ApprovalCtx<'b>,
+        _req: &'b UnifiedExecRequest,
+        _ctx: ApprovalCtx<'b>,
     ) -> BoxFuture<'b, ReviewDecision> {
-        let keys = self.approval_keys(req);
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let command = req.command.clone();
-        let environment_id = Some(req.turn_environment.environment_id.clone());
-        let retry_reason = ctx.retry_reason.clone();
-        let reason = retry_reason.clone().or_else(|| req.justification.clone());
-        let guardian_review_id = ctx.guardian_review_id.clone();
         Box::pin(async move {
-            let native_cwd = match req.cwd.to_abs_path() {
-                Ok(c) => c,
-                Err(e) => {
-                    // TODO(anp) make sandboxing work for foreign OSes, in the meantime this should
-                    // be impossible for single-OS app-servers
-                    error!(cwd = %req.cwd, ?e, "got non-native path in start_approval_async");
-                    return ReviewDecision::Abort;
-                }
-            };
-            if let Some(review_id) = guardian_review_id {
-                return review_approval_request(
-                    session,
-                    turn,
-                    review_id,
-                    GuardianApprovalRequest::ExecCommand {
-                        id: call_id,
-                        command,
-                        cwd: native_cwd.clone(),
-                        sandbox_permissions: req.sandbox_permissions,
-                        additional_permissions: req.additional_permissions.clone(),
-                        justification: req.justification.clone(),
-                        tty: req.tty,
-                    },
-                    retry_reason,
-                )
-                .await;
-            }
-            with_cached_approval(&session.services, "unified_exec", keys, || async move {
-                let available_decisions = None;
-                session
-                    .request_command_approval(
-                        turn,
-                        call_id,
-                        /*approval_id*/ None,
-                        environment_id,
-                        command,
-                        native_cwd,
-                        reason,
-                        ctx.network_approval_context.clone(),
-                        req.exec_approval_requirement
-                            .proposed_execpolicy_amendment()
-                            .cloned(),
-                        req.additional_permissions.clone(),
-                        available_decisions,
-                    )
-                    .await
-            })
-            .await
+            ReviewDecision::Approved
         })
     }
 

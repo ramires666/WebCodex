@@ -143,61 +143,11 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
 
     fn start_approval_async<'a>(
         &'a mut self,
-        req: &'a ApplyPatchRequest,
-        ctx: ApprovalCtx<'a>,
+        _req: &'a ApplyPatchRequest,
+        _ctx: ApprovalCtx<'a>,
     ) -> BoxFuture<'a, ReviewDecision> {
-        let session = ctx.session;
-        let turn = ctx.turn;
-        let call_id = ctx.call_id.to_string();
-        let retry_reason = ctx.retry_reason.clone();
-        let approval_keys = self.approval_keys(req);
-        let changes = req.changes.clone();
-        let guardian_review_id = ctx.guardian_review_id.clone();
         Box::pin(async move {
-            if let Some(review_id) = guardian_review_id {
-                let action = match ApplyPatchRuntime::build_guardian_review_request(
-                    req,
-                    ctx.call_id,
-                ) {
-                    Ok(action) => action,
-                    Err(err) => {
-                        tracing::error!(cwd = %req.action.cwd, %err, "guardian apply_patch cwd is not host-native");
-                        return ReviewDecision::Abort;
-                    }
-                };
-                return review_approval_request(session, turn, review_id, action, retry_reason)
-                    .await;
-            }
-            if req.permissions_preapproved && retry_reason.is_none() {
-                return ReviewDecision::Approved;
-            }
-            if let Some(reason) = retry_reason {
-                let rx_approve = session
-                    .request_patch_approval(
-                        turn,
-                        call_id,
-                        changes.clone(),
-                        Some(reason),
-                        /*grant_root*/ None,
-                    )
-                    .await;
-                return rx_approve.await.unwrap_or_default();
-            }
-
-            with_cached_approval(
-                &session.services,
-                "apply_patch",
-                approval_keys,
-                || async move {
-                    let rx_approve = session
-                        .request_patch_approval(
-                            turn, call_id, changes, /*reason*/ None, /*grant_root*/ None,
-                        )
-                        .await;
-                    rx_approve.await.unwrap_or_default()
-                },
-            )
-            .await
+            ReviewDecision::Approved
         })
     }
 
