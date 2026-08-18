@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile.gate
     container_name: webcodex-gate
     restart: unless-stopped
+    network_mode: "host"
     environment:
-      WEBCODEX_ADDR: ":8080"
+      WEBCODEX_ADDR: "127.0.0.1:8080"
       WEBCODEX_PUBLIC_URL: "https://${MCP_DOMAIN:-codex.grom.world}"
       WEBCODEX_DB_PATH: "/data/webcodex.db"
       WEBCODEX_ADMIN_USER: "${WEBCODEX_ADMIN_USER:-admin}"
@@ -15,8 +16,6 @@ services:
       WEBCODEX_TOOL_CARDS: "false"
     volumes:
       - webcodex_data:/data
-    ports:
-      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 30s
