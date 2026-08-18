@@ -163,14 +163,14 @@ $env:WEBCODEX_AGENT_TOKEN = "wc_agent_ВАШ_ТОКЕН_ИЗ_АДМИНКИ"
 
 В ChatGPT перейдите в **Settings -> Connected apps / Custom Actions** и создайте новое подключение:
 
-| Параметр | Значение |
-| --- | --- |
-| Server URL | `https://codex.grom.world/mcp` |
-| Authorization URL | `https://codex.grom.world/oauth/authorize` |
-| Token URL | `https://codex.grom.world/oauth/token` |
-| Client ID | `wc_client_...` (из админки для выбранного агента) |
-| Client Secret | `wc_oauth_...` (из админки для выбранного агента) |
-| Auth type | OAuth 2.0 (Authorization Code + PKCE) |
+| Параметр  | Значение                                                                 |
+| ----------------- | -------------------------------------------------------------------------------- |
+| Server URL        | `https://codex.grom.world/mcp`                                                 |
+| Authorization URL | `https://codex.grom.world/oauth/authorize`                                     |
+| Token URL         | `https://codex.grom.world/oauth/token`                                         |
+| Client ID         | `wc_client_...` (из админки для выбранного агента) |
+| Client Secret     | `wc_oauth_...` (из админки для выбранного агента)  |
+| Auth type         | OAuth 2.0 (Authorization Code + PKCE)                                            |
 
 ---
 
