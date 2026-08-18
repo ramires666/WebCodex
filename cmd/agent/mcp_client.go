@@ -10,6 +10,8 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,7 +67,21 @@ func (c *mcpClient) initialize(ctx context.Context) error {
 
 // startMCP launches the configured Codex MCP server over stdio.
 func startMCP(ctx context.Context, shellCmd string) (*mcpClient, error) {
-	cmd := exec.CommandContext(ctx, "sh", "-lc", shellCmd)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		if !strings.ContainsAny(shellCmd, "|><;&") {
+			parts := strings.Fields(shellCmd)
+			if len(parts) == 0 {
+				return nil, errors.New("empty command")
+			}
+			cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
+		} else {
+			cmd = exec.CommandContext(ctx, "cmd.exe", "/c", shellCmd)
+		}
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-lc", shellCmd)
+	}
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("open stdin: %w", err)

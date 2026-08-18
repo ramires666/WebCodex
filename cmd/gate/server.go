@@ -102,17 +102,45 @@ func (s *server) existingRuntime(agentID string) *agentRuntime {
 	return s.runtimes[agentID]
 }
 
+// withCORS adds Cross-Origin Resource Sharing headers required for ChatGPT Web and MCP discovery.
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version, X-Requested-With, Origin")
+		w.Header().Set("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Protocol-Version, Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // routes declares every public and administrative endpoint served by the gate.
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
+
+	// Root endpoint
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"service": "WebCodex Gate",
+			"status":  "ok",
+			"admin":   "/admin",
+			"mcp":     "/mcp",
+		})
+	})
 
 	// MCP endpoints
 	mux.HandleFunc("GET /mcp", s.handleMCP)
 	mux.HandleFunc("POST /mcp", s.handleMCP)
 	mux.HandleFunc("DELETE /mcp", s.handleMCP)
+	mux.HandleFunc("HEAD /mcp", s.handleMCP)
 	mux.HandleFunc("GET /mcp/v2", s.handleMCP)
 	mux.HandleFunc("POST /mcp/v2", s.handleMCP)
 	mux.HandleFunc("DELETE /mcp/v2", s.handleMCP)
+	mux.HandleFunc("HEAD /mcp/v2", s.handleMCP)
 
 	// OAuth discovery & metadata
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.handleProtectedResource)
@@ -121,6 +149,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.handleOAuthServer)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server/mcp", s.handleOAuthServer)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server/mcp/v2", s.handleOAuthServer)
+	mux.HandleFunc("GET /.well-known/openid-configuration", s.handleOAuthServer)
 
 	// OAuth authorization & token exchange
 	mux.HandleFunc("GET /oauth/authorize", s.handleAuthorize)
@@ -152,5 +181,5 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /admin/agents/{id}/policy", s.adminAuth(s.handleAdminPolicy))
 	mux.HandleFunc("POST /admin/agents/{id}/delete", s.adminAuth(s.handleAdminDeleteAgent))
 
-	return mux
+	return withCORS(mux)
 }
