@@ -12,3 +12,10 @@ dev-data/
 *.db
 *.sqlite
 *.sqlite3
+
+# Agent scripts and binaries
+start-agent-thunderfull.bat
+start-agent-*.bat
+webcodex-agent.exe
+*.exe
+*~
