@@ -14,8 +14,13 @@ import (
 	"webcodex/internal/protocol"
 )
 
+// mcpRunner represents an entity that can execute an MCP JSON-RPC call (native or legacy).
+type mcpRunner interface {
+	call(ctx context.Context, request json.RawMessage) (json.RawMessage, error)
+}
+
 // streamOnce holds one outbound NDJSON connection and dispatches gate requests concurrently.
-func streamOnce(ctx context.Context, client *http.Client, gateURL, token string, mcp *mcpClient) error {
+func streamOnce(ctx context.Context, client *http.Client, gateURL, token string, runner mcpRunner) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, gateURL+"/agent/stream", nil)
 	if err != nil {
 		return fmt.Errorf("create stream request: %w", err)
@@ -44,7 +49,7 @@ func streamOnce(ctx context.Context, client *http.Client, gateURL, token string,
 			log.Printf("bad stream json: %v", err)
 			continue
 		}
-		go handleRequest(ctx, client, gateURL, token, mcp, request)
+		go handleRequest(ctx, client, gateURL, token, runner, request)
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("read stream: %w", err)
@@ -52,13 +57,13 @@ func streamOnce(ctx context.Context, client *http.Client, gateURL, token string,
 	return errors.New("stream closed")
 }
 
-// handleRequest forwards one gate request to Codex MCP and posts the correlated result.
+// handleRequest forwards one gate request to the MCP runner and posts the correlated result.
 func handleRequest(
 	ctx context.Context,
 	client *http.Client,
 	gateURL string,
 	token string,
-	mcp *mcpClient,
+	runner mcpRunner,
 	request protocol.AgentRequest,
 ) {
 	started := time.Now()
@@ -68,7 +73,7 @@ func handleRequest(
 	callCtx, cancel := context.WithTimeout(ctx, durationEnv("WEBCODEX_MCP_CALL_TIMEOUT", 10*time.Minute))
 	defer cancel()
 
-	response, err := mcp.call(callCtx, request.Request)
+	response, err := runner.call(callCtx, request.Request)
 	actionResult := formatActionResponse(response, err, time.Since(started))
 	log.Printf("◀ %s (id=%s)", actionResult, request.ID)
 	result := protocol.AgentResponse{ID: request.ID, Response: response}

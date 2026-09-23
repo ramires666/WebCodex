@@ -53,6 +53,9 @@ func describeToolCall(name string, args map[string]any) string {
 	switch name {
 	case "shell_command", "exec_command", "bash":
 		cmdStr, _ := args["command"].(string)
+		if cmdStr == "" {
+			cmdStr, _ = args["cmd"].(string)
+		}
 		cmdStr = compactString(cmdStr, 80)
 		workdir, _ := args["workdir"].(string)
 		if workdir != "" {

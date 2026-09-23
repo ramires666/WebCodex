@@ -70,26 +70,35 @@ func findCodexMCP() (string, []string) {
 func main() {
 	gateURL := strings.TrimRight(env("WEBCODEX_GATE_URL", ""), "/")
 	token := env("WEBCODEX_AGENT_TOKEN", "")
-	binary, args := findCodexMCP()
+	mode := strings.ToLower(env("WEBCODEX_MODE", "native"))
 
 	if gateURL == "" || token == "" {
 		log.Fatal("WEBCODEX_GATE_URL and WEBCODEX_AGENT_TOKEN are required")
 	}
 
-	log.Printf("starting agent with binary: %s, args: %v", binary, args)
-	mcp, err := startMCP(context.Background(), binary, args)
-	if err != nil {
-		log.Fatalf("start codex mcp (%s): %v", binary, err)
-	}
-	if err := mcp.initialize(context.Background()); err != nil {
-		log.Fatalf("initialize codex mcp: %v", err)
+	var runner mcpRunner
+	if mode == "codex" {
+		binary, args := findCodexMCP()
+		log.Printf("starting agent in legacy CODEX mode with binary: %s, args: %v", binary, args)
+		mcp, err := startMCP(context.Background(), binary, args)
+		if err != nil {
+			log.Fatalf("start codex mcp (%s): %v", binary, err)
+		}
+		if err := mcp.initialize(context.Background()); err != nil {
+			log.Fatalf("initialize codex mcp: %v", err)
+		}
+		runner = mcp
+	} else {
+		log.Printf("starting agent in NATIVE DIRECT mode (zero external limits, pure local execution)")
+		runner = newNativeExecutor()
 	}
 
 	client := &http.Client{}
 	for {
-		if err := streamOnce(context.Background(), client, gateURL, token, mcp); err != nil {
+		if err := streamOnce(context.Background(), client, gateURL, token, runner); err != nil {
 			log.Printf("stream: %v", err)
 			time.Sleep(time.Second)
 		}
 	}
 }
+
